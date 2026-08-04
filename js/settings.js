@@ -13,9 +13,15 @@ function openSettings(){
       ${masterSectionHtml('category', 'Category')}
       <hr class="divider">
       ${subCategorySectionHtml()}
+      <hr class="divider">
+      <button class="btn btn-danger" onclick="logout()">Log out</button>
       <button class="btn btn-outline" onclick="closeModal()">Close</button>
     </div>
   </div>`;
+}
+
+function logout(){
+  window.location.href = '/cdn-cgi/access/logout';
 }
 
 function masterEntriesOfType(type){ return masterData.filter(m=>m.type===type); }
