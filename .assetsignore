@@ -1,0 +1,8 @@
+.git
+.github
+.claude
+.DS_Store
+app_scripts
+wrangler.jsonc
+.assetsignore
+*.md
