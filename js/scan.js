@@ -19,33 +19,55 @@ function handleManualCode(){
   if(!v) return;
   handleScanResult(v);
 }
+function setScanStatus(msg){
+  const s = document.getElementById('scanStatus');
+  if(s) s.textContent = msg;
+}
 async function startScan(){
   const video = document.getElementById('scanVideo');
   if(!video) return;
+  stopScan();
+  let stream;
   try{
-    scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-    video.srcObject = scanStream;
+    // Higher resolution helps with small labels; 'ideal' falls back gracefully
+    stream = await navigator.mediaDevices.getUserMedia({video:{
+      facingMode:'environment', width:{ideal:1920}, height:{ideal:1080}
+    }});
+    // Continuous autofocus where supported (ignored otherwise)
+    try{ await stream.getVideoTracks()[0].applyConstraints({advanced:[{focusMode:'continuous'}]}); }catch(_){}
+    if(currentTab!=='scan' || !document.getElementById('scanVideo')){
+      stream.getTracks().forEach(t=>t.stop()); return; // user left the tab while the camera was starting
+    }
+    scanStream = stream;
+    video.srcObject = stream;
     await video.play();
-    document.getElementById('scanStatus').textContent = 'Point the camera at the QR code';
-    scanLoop();
   }catch(e){
-    const s = document.getElementById('scanStatus');
-    if(s) s.textContent = 'Could not open camera (allow camera access, or upload a photo instead)';
+    if(stream && stream!==scanStream) stream.getTracks().forEach(t=>t.stop());
+    setScanStatus('Could not open camera (' + (e.name||'error') + '). Allow camera access, or upload a photo instead.');
+    return;
   }
+  setScanStatus('Point the camera at the QR code');
+  scanLoop();
 }
 function scanLoop(){
   const video = document.getElementById('scanVideo');
   const canvas = document.getElementById('scanCanvas');
-  if(!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA){
-    scanRAF = requestAnimationFrame(scanLoop); return;
-  }
-  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(video,0,0,canvas.width,canvas.height);
-  const imgData = ctx.getImageData(0,0,canvas.width,canvas.height);
-  const code = jsQR(imgData.data, imgData.width, imgData.height);
-  if(code && code.data){ handleScanResult(code.data); return; }
+  if(!video || !canvas || currentTab!=='scan') return;
+  // Schedule the next frame first so one failed frame can't end scanning
   scanRAF = requestAnimationFrame(scanLoop);
+  if(video.readyState !== video.HAVE_ENOUGH_DATA || !video.videoWidth) return;
+  try{
+    if(canvas.width!==video.videoWidth) canvas.width = video.videoWidth;
+    if(canvas.height!==video.videoHeight) canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d', {willReadFrequently:true});
+    ctx.drawImage(video,0,0,canvas.width,canvas.height);
+    const imgData = ctx.getImageData(0,0,canvas.width,canvas.height);
+    const code = jsQR(imgData.data, imgData.width, imgData.height, {inversionAttempts:'dontInvert'});
+    if(code && code.data) handleScanResult(code.data);
+  }catch(e){
+    // Shown so a decode problem is not mistaken for a camera problem
+    setScanStatus('Scan error: ' + (e.name||'') + ' ' + (e.message||''));
+  }
 }
 function stopScan(){
   if(scanRAF) cancelAnimationFrame(scanRAF);
